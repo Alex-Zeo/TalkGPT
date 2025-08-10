@@ -1,0 +1,99 @@
+# TalkGPT Core Dependencies
+# Pinned versions for reproducible builds
+
+# ---- Core Runtime ----
+python-dotenv==1.0.0
+
+# ---- Deep Learning Stack ----
+torch==2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+torchaudio==2.4.0+cu124 --index-url https://download.pytorch.org/whl/cu124
+
+# ---- Whisper Fast Implementation ----
+faster-whisper==1.1.1
+ctranslate2>=4.5.0
+
+# ---- Audio Processing ----
+ffmpeg-python==0.2.0
+pydub==0.25.1
+librosa==0.10.2.post2
+soundfile==0.12.1
+
+# ---- Speaker Analysis & Diarization ----
+pyannote.audio==3.2.1
+
+# ---- Concurrency & Task Management ----
+celery[redis]==5.3.4
+redis==5.0.1
+
+# ---- Configuration & Validation ----
+pydantic==2.5.0
+pyyaml==6.0.1
+
+# ---- Utilities ----
+rich==13.7.0
+tqdm==4.66.4
+psutil==5.9.6
+pathlib2==2.3.7
+
+# ---- Logging & Monitoring ----
+structlog==23.2.0
+
+# TalkGPT Development Dependencies
+# Testing, linting, and development tools
+
+# ---- Testing Framework ----
+pytest==7.4.3
+pytest-asyncio==0.21.1
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+
+# ---- Code Quality ----
+black==23.11.0
+isort==5.12.0
+flake8==6.1.0
+mypy==1.7.1
+
+# ---- Development Tools ----
+pre-commit==3.5.0
+jupyter==1.0.0
+
+# ---- Documentation ----
+mkdocs==1.5.3
+mkdocs-material==9.4.8
+
+# TalkGPT CLI Dependencies
+# Additional packages for command-line interface
+
+# ---- CLI Framework ----
+click==8.1.7
+typer==0.9.0
+
+# ---- Enhanced Console Output ----
+rich==13.7.0
+colorama==0.4.6
+
+# ---- Progress Bars & Status ----
+tqdm==4.66.4
+
+# ---- File System Operations ----
+watchdog==3.0.0
+
+# TalkGPT MCP Server Dependencies
+# Model Context Protocol server implementation
+
+# ---- Web Framework ----
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+
+# ---- WebSocket Support ----
+websockets==12.0
+
+# ---- HTTP Client ----
+httpx==0.25.2
+
+# ---- JSON-RPC ----
+jsonrpcserver==5.0.9
+jsonrpcclient==4.0.3
+
+# ---- Async Support ----
+asyncio-mqtt==0.13.0

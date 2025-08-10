@@ -1,0 +1,54 @@
+# TalkGPT Production Configuration
+# Optimized settings for production deployment
+
+# Processing Configuration (Production Optimized)
+processing:
+  speed_multiplier: 2.0     # Higher speed for production
+  max_workers: 8            # Fixed worker count for stability
+  chunk_size: 60            # Larger chunks for efficiency
+  overlap_duration: 10      # Larger overlap for accuracy
+  silence_threshold: -35    # More aggressive silence detection
+  min_silence_len: 500      # Shorter minimum silence
+  remove_silence: true
+
+# Transcription Configuration
+transcription:
+  model_size: "large-v3"
+  device: "cuda"            # Force GPU in production
+  compute_type: "float16"   # Optimal for production
+  language: null
+  temperature: 0.0          # Deterministic output
+  beam_size: 5
+  best_of: 5
+  patience: 1.0
+
+# Output Configuration
+output:
+  formats: ["srt", "json"]  # Minimal formats for speed
+  include_timestamps: true
+  include_confidence: true
+  speaker_labels: true
+  word_timestamps: false
+
+# Analytics Configuration
+analytics:
+  enable_speaker_diarization: true
+  enable_uncertainty_detection: true
+  confidence_threshold: -0.8        # Stricter threshold
+  min_speakers: null
+  max_speakers: 10                  # Reasonable limit
+
+# Logging Configuration (Production)
+logging:
+  level: "WARNING"                  # Reduced logging
+  console_format: "json"            # Structured logging
+  file_format: "json"               # Machine-readable logs
+  per_file_logs: false              # Centralized logging
+  log_dir: "/var/log/talkgpt"       # Standard log location
+  max_log_files: 1000               # More log retention
+
+# Resource Management (Production)
+resources:
+  max_memory_gb: 64                 # Memory limit
+  gpu_memory_fraction: 0.95         # Maximize GPU usage
+  cpu_threads: 16                   # Fixed thread count

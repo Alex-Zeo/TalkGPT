@@ -1,0 +1,63 @@
+# TalkGPT Default Configuration
+# Base settings for all environments
+
+# Processing Configuration
+processing:
+  speed_multiplier: 1.5  # Audio playback speed (1.0-3.0)
+  max_workers: null      # null = auto-detect based on hardware
+  chunk_size: 30         # Audio chunk size in seconds
+  overlap_duration: 5    # Overlap between chunks in seconds
+  silence_threshold: -40 # Silence detection threshold in dB
+  min_silence_len: 1000  # Minimum silence length in ms
+  remove_silence: true   # Remove long silence segments
+
+# Transcription Configuration
+transcription:
+  model_size: "large-v3"    # Whisper model size
+  device: "auto"            # auto, cpu, cuda, mps
+  compute_type: "auto"      # auto, float16, int8, float32
+  language: null            # null = auto-detect
+  temperature: 0.0          # Sampling temperature
+  beam_size: 5              # Beam search size
+  best_of: 5                # Number of candidates
+  patience: 1.0             # Beam search patience
+
+# Output Configuration
+output:
+  formats: ["srt", "json", "txt"]  # Output formats
+  include_timestamps: true         # Include detailed timestamps
+  include_confidence: true         # Include confidence scores
+  speaker_labels: true             # Include speaker identification
+  word_timestamps: true            # Word-level timestamps (required for timing analysis)
+
+# Analytics Configuration
+analytics:
+  enable_speaker_diarization: true
+  enable_uncertainty_detection: true
+  enable_timing_analysis: true     # Enable advanced timing analysis
+  confidence_threshold: -1.0       # Uncertainty threshold
+  min_speakers: null               # null = auto-detect
+  max_speakers: null               # null = auto-detect
+  
+  # Timing Analysis Configuration
+  timing:
+    bucket_seconds: 4.0             # Target bucket duration in seconds
+    bucket_tolerance: 0.25          # Tolerance for bucket length (±seconds)
+    gap_threshold: 1.5              # Threshold multiplier for gap anomaly detection
+    gap_list_max: 20                # Maximum gaps to store per bucket
+    variance_threshold: 1.5         # Threshold multiplier for variance anomaly detection
+
+# Logging Configuration
+logging:
+  level: "INFO"                    # DEBUG, INFO, WARNING, ERROR
+  console_format: "rich"           # rich, simple, json
+  file_format: "detailed"          # detailed, simple, json
+  per_file_logs: true              # Create log file per input file
+  log_dir: "logs"                  # Log directory
+  max_log_files: 100               # Maximum log files to keep
+  
+# Resource Management
+resources:
+  max_memory_gb: null              # null = no limit
+  gpu_memory_fraction: 0.9         # Fraction of GPU memory to use
+  cpu_threads: null                # null = auto-detect
