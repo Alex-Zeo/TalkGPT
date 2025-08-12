@@ -16,7 +16,7 @@ from dataclasses import dataclass
 class ProcessingConfig(BaseModel):
     """Processing configuration settings."""
     # Accuracy-first: avoid speed-up by default
-    speed_multiplier: float = Field(default=1.0, ge=1.0, le=3.0)
+    speed_multiplier: float = Field(default=1.75, ge=1.0, le=3.0)
     max_workers: Optional[int] = Field(default=None, ge=1)
     chunk_size: int = Field(default=30, ge=5, le=300)
     overlap_duration: int = Field(default=5, ge=0, le=30)

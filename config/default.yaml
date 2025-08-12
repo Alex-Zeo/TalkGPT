@@ -3,7 +3,7 @@
 
 # Processing Configuration
 processing:
-  speed_multiplier: 1.5  # Audio playback speed (1.0-3.0)
+  speed_multiplier: 1.75  # Audio playback speed optimization (1.0-3.0)
   max_workers: null      # null = auto-detect based on hardware
   chunk_size: 30         # Audio chunk size in seconds
   overlap_duration: 5    # Overlap between chunks in seconds

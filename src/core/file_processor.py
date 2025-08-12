@@ -249,7 +249,7 @@ class FileProcessor:
     
     def apply_speed_multiplier(self, 
                              input_path: Union[str, Path], 
-                             speed_multiplier: float = 1.5,
+                             speed_multiplier: float = 1.75,
                              output_path: Optional[Union[str, Path]] = None) -> Path:
         """
         Apply speed multiplier to audio without changing pitch.
@@ -409,7 +409,7 @@ class FileProcessor:
     def process_file(self, 
                     input_path: Union[str, Path],
                     output_dir: Union[str, Path],
-                    speed_multiplier: float = 1.5,
+                    speed_multiplier: float = 1.75,
                     remove_silence: bool = True,
                     normalize: bool = True,
                     target_sample_rate: int = 16000,

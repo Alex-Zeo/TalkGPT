@@ -114,7 +114,7 @@ talkgpt stream --input-device microphone --output-format live
 
 # Configuration
 talkgpt config show
-talkgpt config set processing.speed_multiplier 2.0
+talkgpt config set processing.speed_multiplier 1.75
 talkgpt config validate
 
 # Status and benchmarking
@@ -140,7 +140,7 @@ Configuration is layered (highest → lowest):
 
 Common keys:
 
-- `processing.speed_multiplier` (default 1.5)
+- `processing.speed_multiplier` (default 1.75)
 - `processing.chunk_size` (seconds, default 30)
 - `processing.overlap_duration` (seconds, default 5)
 - `processing.max_workers` (auto by default)

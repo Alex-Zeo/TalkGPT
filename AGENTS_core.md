@@ -9,7 +9,7 @@
   - `class FileProcessor`
     - `scan_directory(directory, recursive=True, extensions=None) -> List[Path]`
     - `get_file_info(file_path) -> AudioFileInfo`
-    - `process_file(input_path, output_dir, speed_multiplier=1.5, remove_silence=True, normalize=True, target_sample_rate=16000, target_channels=1) -> ProcessingResult`
+    - `process_file(input_path, output_dir, speed_multiplier=1.75, remove_silence=True, normalize=True, target_sample_rate=16000, target_channels=1) -> ProcessingResult`
 - `src/core/chunker.py`
   - `class SmartChunker`
     - `chunk_audio(audio_path, output_dir=None, remove_silence=True) -> ChunkingResult`

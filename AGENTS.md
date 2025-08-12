@@ -416,7 +416,7 @@ talkgpt stream --input-device microphone --output-format live
 talkgpt config show
 
 # Set configuration values
-talkgpt config set processing.speed_multiplier 2.0
+talkgpt config set processing.speed_multiplier 1.75
 talkgpt config set transcription.model_size large-v3
 
 # Reset to defaults
@@ -872,7 +872,7 @@ The system uses YAML configuration files in the `config/` directory:
 #### Core Configuration Options
 
 **Processing Settings:**
-- `processing.speed_multiplier`: Audio playback speed (default: 1.5)
+- `processing.speed_multiplier`: Audio playback speed optimization (default: 1.75)
 - `processing.max_workers`: Concurrency level (default: auto-detect)
 - `processing.chunk_size`: Audio segment size in seconds (default: 30)
 - `processing.overlap_duration`: Segment overlap in seconds (default: 5)
@@ -933,7 +933,7 @@ MCP server settings control agent integration capabilities:
   - `class FileProcessor`
     - `scan_directory(directory, recursive=True, extensions=None) -> List[Path]`
     - `get_file_info(file_path) -> AudioFileInfo`
-    - `process_file(input_path, output_dir, speed_multiplier=1.5, remove_silence=True, normalize=True, target_sample_rate=16000, target_channels=1) -> ProcessingResult`
+    - `process_file(input_path, output_dir, speed_multiplier=1.75, remove_silence=True, normalize=True, target_sample_rate=16000, target_channels=1) -> ProcessingResult`
 - `src/core/chunker.py`
   - `class SmartChunker`
     - `chunk_audio(audio_path, output_dir=None, remove_silence=True) -> ChunkingResult`

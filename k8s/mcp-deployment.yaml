@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkgpt-mcp
+  namespace: talkgpt
+  labels:
+    app: talkgpt-mcp
+    component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: talkgpt-mcp
+  template:
+    metadata:
+      labels:
+        app: talkgpt-mcp
+        component: api
+    spec:
+      serviceAccountName: talkgpt-ksa
+      containers:
+      - name: mcp-server
+        image: us-central1-docker.pkg.dev/talkgpt-production/talkgpt-images/talkgpt-mcp:latest
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: GCP_PROJECT_ID
+        - name: INPUT_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: INPUT_BUCKET
+        - name: OUTPUT_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: OUTPUT_BUCKET
+        - name: MODELS_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: MODELS_BUCKET
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: talkgpt-secrets
+              key: redis-url
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/var/secrets/google/key.json"
+        volumeMounts:
+        - name: google-cloud-key
+          mountPath: /var/secrets/google
+          readOnly: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8000
+          initialDelaySeconds: 15
+          periodSeconds: 5
+      volumes:
+      - name: google-cloud-key
+        secret:
+          secretName: talkgpt-gcp-key
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talkgpt-mcp-service
+  namespace: talkgpt
+  labels:
+    app: talkgpt-mcp
+spec:
+  selector:
+    app: talkgpt-mcp
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: http
+  type: ClusterIP
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: talkgpt-mcp-hpa
+  namespace: talkgpt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: talkgpt-mcp
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

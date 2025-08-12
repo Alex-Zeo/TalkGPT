@@ -1,0 +1,144 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkgpt-gpu-optimized
+  namespace: talkgpt
+  labels:
+    app: talkgpt-gpu-optimized
+    type: high-performance
+spec:
+  replicas: 3  # Start with 3 GPU workers
+  selector:
+    matchLabels:
+      app: talkgpt-gpu-optimized
+  template:
+    metadata:
+      labels:
+        app: talkgpt-gpu-optimized
+        type: high-performance
+    spec:
+      serviceAccountName: talkgpt-ksa
+      nodeSelector:
+        accelerator: nvidia-tesla-t4
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: present
+        effect: NoSchedule
+      # Enable shared memory for faster model loading
+      volumes:
+      - name: model-cache
+        emptyDir:
+          sizeLimit: 10Gi
+      - name: shared-memory
+        emptyDir:
+          medium: Memory
+          sizeLimit: 4Gi
+      containers:
+      - name: gpu-worker-optimized
+        image: us-central1-docker.pkg.dev/talkgpt-production/talkgpt-images/talkgpt-gpu:latest
+        command: ["python", "-m", "src.workers.optimized_gpu_worker"]
+        env:
+        - name: WORKER_TYPE
+          value: "gpu-optimized"
+        - name: MODEL_CACHE_PATH
+          value: "/model-cache"
+        - name: SHARED_MEMORY_PATH
+          value: "/dev/shm"
+        - name: CONCURRENT_CHUNKS
+          value: "4"  # Process 4 chunks simultaneously per GPU
+        - name: STREAMING_MODE
+          value: "true"
+        - name: PRELOAD_MODEL
+          value: "true"
+        - name: SPEED_MULTIPLIER
+          value: "1.75"
+        volumeMounts:
+        - name: model-cache
+          mountPath: /model-cache
+        - name: shared-memory
+          mountPath: /dev/shm
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "4"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "16Gi"
+            cpu: "8"
+            nvidia.com/gpu: 1
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 60  # Allow time for model loading
+          periodSeconds: 10
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: talkgpt-gpu-optimized-hpa
+  namespace: talkgpt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: talkgpt-gpu-optimized
+  minReplicas: 1
+  maxReplicas: 6  # Up to 6 Tesla T4 GPUs
+  metrics:
+  - type: Resource
+    resource:
+      name: nvidia.com/gpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Pods
+    pods:
+      metric:
+        name: queue_depth_per_worker
+      target:
+        type: AverageValue
+        averageValue: "10"  # Scale if >10 chunks per worker
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+---
+# Job for preprocessing optimization
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: audio-preprocessor
+  namespace: talkgpt
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: preprocessor
+        image: us-central1-docker.pkg.dev/talkgpt-production/talkgpt-images/talkgpt-app:latest
+        command: ["python", "-m", "src.workers.smart_chunker"]
+        env:
+        - name: CHUNK_STRATEGY
+          value: "smart-overlap"
+        - name: PARALLEL_CHUNKS
+          value: "16"  # Create 16 chunks simultaneously
+        - name: VOICE_ACTIVITY_DETECTION
+          value: "true"
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "4"
+          limits:
+            memory: "8Gi"
+            cpu: "8"

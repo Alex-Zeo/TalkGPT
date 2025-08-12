@@ -1,0 +1,51 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: talkgpt-ingress
+  namespace: talkgpt
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "talkgpt-ip"
+    networking.gke.io/managed-certificates: "talkgpt-ssl-cert"
+    kubernetes.io/ingress.allow-http: "false"
+    ingress.gcp.kubernetes.io/pre-shared-cert: "talkgpt-ssl-cert"
+    # Enable Cloud Armor for security
+    cloud.google.com/armor-config: '{"talkgpt-security-policy": "talkgpt-armor-policy"}'
+spec:
+  rules:
+  - host: talkgpt.yourdomain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: talkgpt-mcp-service
+            port:
+              number: 8000
+---
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: talkgpt-ssl-cert
+  namespace: talkgpt
+spec:
+  domains:
+    - talkgpt.yourdomain.com
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: talkgpt-mcp-nodeport
+  namespace: talkgpt
+  labels:
+    app: talkgpt-mcp
+spec:
+  type: NodePort
+  selector:
+    app: talkgpt-mcp
+  ports:
+  - port: 8000
+    targetPort: 8000
+    nodePort: 30800
+    name: http

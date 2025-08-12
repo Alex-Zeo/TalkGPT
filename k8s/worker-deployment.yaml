@@ -1,0 +1,186 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkgpt-worker-cpu
+  namespace: talkgpt
+  labels:
+    app: talkgpt-worker
+    type: cpu
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: talkgpt-worker
+      type: cpu
+  template:
+    metadata:
+      labels:
+        app: talkgpt-worker
+        type: cpu
+    spec:
+      serviceAccountName: talkgpt-ksa
+      containers:
+      - name: celery-worker
+        image: us-central1-docker.pkg.dev/talkgpt-production/talkgpt-images/talkgpt-worker:latest
+        command: ["celery", "-A", "src.workers.celery_app.celery_app", "worker", "--loglevel=INFO", "--concurrency=2"]
+        env:
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: GCP_PROJECT_ID
+        - name: INPUT_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: INPUT_BUCKET
+        - name: OUTPUT_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: OUTPUT_BUCKET
+        - name: MODELS_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: MODELS_BUCKET
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: talkgpt-secrets
+              key: redis-url
+        - name: WORKER_TYPE
+          value: "cpu"
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/var/secrets/google/key.json"
+        volumeMounts:
+        - name: google-cloud-key
+          mountPath: /var/secrets/google
+          readOnly: true
+        - name: tmp-storage
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "1"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+      volumes:
+      - name: google-cloud-key
+        secret:
+          secretName: talkgpt-gcp-key
+      - name: tmp-storage
+        emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: talkgpt-worker-gpu
+  namespace: talkgpt
+  labels:
+    app: talkgpt-worker
+    type: gpu
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: talkgpt-worker
+      type: gpu
+  template:
+    metadata:
+      labels:
+        app: talkgpt-worker
+        type: gpu
+    spec:
+      serviceAccountName: talkgpt-ksa
+      nodeSelector:
+        accelerator: nvidia-tesla-t4
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: present
+        effect: NoSchedule
+      containers:
+      - name: celery-worker-gpu
+        image: us-central1-docker.pkg.dev/talkgpt-production/talkgpt-images/talkgpt-gpu:latest
+        command: ["celery", "-A", "src.workers.celery_app.celery_app", "worker", "--loglevel=INFO", "--concurrency=1", "--queue=gpu"]
+        env:
+        - name: GCP_PROJECT_ID
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: GCP_PROJECT_ID
+        - name: INPUT_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: INPUT_BUCKET
+        - name: OUTPUT_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: OUTPUT_BUCKET
+        - name: MODELS_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: talkgpt-config
+              key: MODELS_BUCKET
+        - name: REDIS_URL
+          valueFrom:
+            secretKeyRef:
+              name: talkgpt-secrets
+              key: redis-url
+        - name: WORKER_TYPE
+          value: "gpu"
+        - name: CUDA_VISIBLE_DEVICES
+          value: "0"
+        - name: GOOGLE_APPLICATION_CREDENTIALS
+          value: "/var/secrets/google/key.json"
+        volumeMounts:
+        - name: google-cloud-key
+          mountPath: /var/secrets/google
+          readOnly: true
+        - name: tmp-storage
+          mountPath: /tmp
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "2"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "8Gi"
+            cpu: "4"
+            nvidia.com/gpu: 1
+      volumes:
+      - name: google-cloud-key
+        secret:
+          secretName: talkgpt-gcp-key
+      - name: tmp-storage
+        emptyDir: {}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: talkgpt-worker-cpu-hpa
+  namespace: talkgpt
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: talkgpt-worker-cpu
+  minReplicas: 1
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80

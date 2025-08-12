@@ -3,7 +3,7 @@
 
 # Processing Configuration (Production Optimized)
 processing:
-  speed_multiplier: 2.0     # Higher speed for production
+  speed_multiplier: 1.75    # Optimal speed for production (balances speed and accuracy)
   max_workers: 8            # Fixed worker count for stability
   chunk_size: 60            # Larger chunks for efficiency
   overlap_duration: 10      # Larger overlap for accuracy
