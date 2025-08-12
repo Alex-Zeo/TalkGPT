@@ -918,3 +918,202 @@ MCP server settings control agent integration capabilities:
 [1]: https://github.com/SYSTRAN/faster-whisper "GitHub - SYSTRAN/faster-whisper: Faster Whisper transcription with CTranslate2"
 [2]: https://huggingface.co/Systran/faster-whisper-large-v3?utm_source=chatgpt.com "Systran/faster-whisper-large-v3 - Hugging Face"
 [3]: https://github.com/SYSTRAN/faster-whisper/issues/1086?utm_source=chatgpt.com "CUDA compatibility with CTranslate2 · Issue #1086 - GitHub"
+
+<!-- START:GENERATED -->
+<!-- AGENTS_core.md -->
+
+# Core Module - Agent Documentation
+
+## Module Overview
+- File preprocessing, smart chunking, transcription engine
+- Integration points: used by CLI, MCP, analytics, and output layers
+
+## API Reference
+- `src/core/file_processor.py`
+  - `class FileProcessor`
+    - `scan_directory(directory, recursive=True, extensions=None) -> List[Path]`
+    - `get_file_info(file_path) -> AudioFileInfo`
+    - `process_file(input_path, output_dir, speed_multiplier=1.5, remove_silence=True, normalize=True, target_sample_rate=16000, target_channels=1) -> ProcessingResult`
+- `src/core/chunker.py`
+  - `class SmartChunker`
+    - `chunk_audio(audio_path, output_dir=None, remove_silence=True) -> ChunkingResult`
+    - `load_chunks_from_metadata(metadata_file) -> ChunkingResult`
+- `src/core/transcriber.py`
+  - `class WhisperTranscriber`
+    - `transcribe_chunk(audio_chunk, ..., word_timestamps=False) -> TranscriptionResult`
+    - `transcribe_file(audio_path, chunking_result=None, **opts) -> BatchTranscriptionResult`
+    - `get_transcriber(**kwargs) -> WhisperTranscriber`
+  - `enhanced_transcribe_with_analysis(audio_path, chunking_result, bucket_seconds=4.0, gap_tolerance=0.25, gap_threshold=1.5, enable_overlap_detection=True, **kwargs) -> Dict[str, Any]`
+
+## Configuration
+- Driven by `config/default.yaml` and `config/production.yaml`
+- Processing: speed, chunking, silence detection
+- Transcription: model, device, compute_type, language
+
+## Usage Examples
+- CLI transcribe invokes file processor → chunker → transcriber
+- Enhanced path triggers 4s window analysis after transcription
+
+## Implementation Details
+- Overlap-aware merging of chunk segments
+- Device/compute auto-routing via `ResourceDetector`
+- Optional word timestamps for analysis
+
+## Testing
+- Core tests recommended: chunk boundaries, merging, confidence calc
+
+## Troubleshooting
+- If ffmpeg not found, install and add to PATH (Windows)
+- If faster-whisper/torch missing, install CPU-only first for quick tests
+
+
+
+
+<!-- AGENTS_analytics.md -->
+
+# Analytics Module - Agent Documentation
+
+## Module Overview
+- Timing analysis (4-second windows), cadence stats, uncertainty detection, speaker diarization
+
+## API Reference
+- `src/analytics/timing_analyzer.py`
+  - `TimingAnalyzer.analyze_timing(transcription_result, speaker_timeline=None) -> (buckets, cadence)`
+- `src/post/segmenter.py` / `src/post/cadence.py` / `src/post/assembler.py`
+  - Bucketing, gap stats, records assembly
+- `src/analytics/uncertainty_detector.py`
+  - `UncertaintyDetector.analyze_uncertainty(transcription_result, audio_path=None) -> UncertaintyAnalysis`
+- `src/analytics/speaker_analyzer.py`
+  - `SpeakerAnalyzer.perform_diarization(audio_path) -> DiarizationResult`
+
+## Configuration
+- `config/default.yaml` → `analytics` section: enable flags, thresholds, timing settings
+
+## Usage Examples
+- CLI enhanced analysis: `--enhanced-analysis` to produce enhanced outputs
+- CLI `analyze quality` and `analyze speakers` commands
+
+## Implementation Details
+- Population variance (ddof=0) for gap analysis
+- Fallbacks when pyannote is unavailable (Windows/dev env)
+
+## Testing
+- Unit tests for gap stats, classification, record validation
+
+## Troubleshooting
+- Ensure word timestamps are enabled for timing analysis
+- pyannote may require HF token on non-Windows platforms
+
+
+
+
+<!-- AGENTS_utils.md -->
+
+# Utils Module - Agent Documentation
+
+## Module Overview
+- Configuration, logging, environment loading, encoding helpers
+
+## API Reference
+- `src/utils/config.py`
+  - `load_config(name="default", **overrides) -> TalkGPTConfig`
+  - `get_config() -> TalkGPTConfig`
+  - `ConfigManager.save_config(config, filename)`
+- `src/utils/logger.py`
+  - `TalkGPTLogger` (Rich console, per-file logs, rotating files)
+  - `get_logger(name)`, `get_file_logger(filename)`, `setup_logging(config)`
+- `src/utils/env_loader.py`
+  - `.ensure_environment_loaded()` sets OpenMP/encoding vars and .env
+
+## Configuration
+- YAML files in `config/`; env overrides via `TALKGPT_*`
+
+## Usage Examples
+- CLI and scripts call `load_config("default")` and `setup_logging()` before pipeline
+
+## Implementation Details
+- Rich logging for console and files; JSON format optional
+- Global logger instance for consistent handlers
+
+## Testing
+- Validate `save_config`, env overrides, log setup without duplicate handlers
+
+## Troubleshooting
+- On Windows terminals, ensure UTF-8 output; use `utils.encoding` where needed
+
+
+
+
+<!-- AGENTS_cli.md -->
+
+# CLI Module - Agent Documentation
+
+## Module Overview
+- Entry point and commands for transcription, batch, analyze, config, status, benchmark, doctor
+
+## Commands
+- `transcribe <input_path>`: single-file transcription with options
+- `batch <input_dir>`: multi-file processing or enqueue to workers (future)
+- `analyze speakers|quality`: run advanced analyses
+- `config show|set|validate`: manage config
+- `status system|jobs`: hardware and queue status
+- `benchmark`: quick performance measurement
+- `doctor`: preflight checks
+
+## Configuration
+- `config/cli.yaml` overrides; CLI flags take highest precedence
+
+## Notes
+- On Windows terminals, UTF-8 may require fallback; `utils.encoding.force_utf8_stdio` is used
+
+
+
+
+<!-- AGENTS_mcp.md -->
+
+# MCP Module - Agent Documentation
+
+## Module Overview
+- Minimal HTTP-based MCP-like server exposing a `transcribe_audio` tool for agents.
+
+## API Reference
+- `POST /tools/transcribe_audio`
+  - Request: `{ input_path, output_dir?, formats?, enhanced_analysis?, language? }`
+  - Response: `{ input_file, output_directory, output_files, processing_time, processing_speed }`
+
+## Configuration
+- `config/mcp.yaml` (server host/port, logging level, tool toggles)
+
+## Usage
+- Local: `uvicorn src.mcp.server:app --host 0.0.0.0 --port 8000`
+- Script: `python scripts/start_mcp_server.py`
+
+## Notes
+- Intended to evolve to JSON-RPC/WebSockets; current MVP uses HTTP JSON
+
+
+
+
+<!-- AGENTS_workers.md -->
+
+# Workers Module - Agent Documentation
+
+## Module Overview
+- Celery worker integration for queued transcription jobs backed by Redis.
+
+## API Reference
+- `src/workers/celery_app.py`: Celery app (broker from `REDIS_URL`)
+- `src/workers/task_manager.py`: tasks
+  - `transcribe_file_task(input_path, output_dir?, enhanced_analysis?, formats?, language?) -> dict`
+
+## CLI Integration
+- `status jobs` queries worker state via Celery inspect
+- Future: `batch --queue` to enqueue jobs instead of inline processing
+
+## Configuration
+- Broker: `REDIS_URL` env, default `redis://localhost:6379/0`
+
+## Notes
+- Ensure ffmpeg is available in the worker image/environment
+
+<!-- END:GENERATED -->

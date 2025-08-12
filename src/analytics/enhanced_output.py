@@ -18,6 +18,7 @@ from dataclasses import asdict
 
 from analytics.timing_analyzer import TimingBucket, CadenceAnalysis
 from utils.logger import get_logger
+from output.md_writer import write_timing_analysis_outputs
 
 
 class EnhancedOutputGenerator:
@@ -53,117 +54,17 @@ class EnhancedOutputGenerator:
             output_dir = Path(".")
         
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_files = {}
-        
         self.logger.info(f"Generating enhanced outputs with {len(timing_buckets)} timing buckets")
-        
-        # 1. Enhanced Markdown Report with Timing Analysis
-        md_file = output_dir / f"{base_name}_enhanced.md"
-        self._generate_enhanced_markdown(
-            timing_buckets, cadence_analysis, uncertainty_result, md_file
+        return write_timing_analysis_outputs(
+            transcription_result,
+            timing_buckets,
+            cadence_analysis,
+            speaker_result,
+            uncertainty_result,
+            output_dir,
+            base_name,
         )
-        output_files['enhanced_markdown'] = str(md_file)
-        
-        # 2. Comprehensive JSON with Timing Data
-        json_file = output_dir / f"{base_name}_timing.json"
-        self._generate_timing_json(
-            transcription_result, timing_buckets, cadence_analysis, 
-            speaker_result, uncertainty_result, json_file
-        )
-        output_files['timing_json'] = str(json_file)
-        
-        # 3. Enhanced SRT with Timing Indicators
-        srt_file = output_dir / f"{base_name}_timing.srt"
-        self._generate_timing_srt(timing_buckets, srt_file)
-        output_files['timing_srt'] = str(srt_file)
-        
-        # 4. Detailed CSV for Analysis
-        csv_file = output_dir / f"{base_name}_timing_analysis.csv"
-        self._generate_timing_csv(timing_buckets, cadence_analysis, csv_file)
-        output_files['timing_csv'] = str(csv_file)
-        
-        # 5. Cadence Analysis Report
-        cadence_file = output_dir / f"{base_name}_cadence_report.md"
-        self._generate_cadence_report(cadence_analysis, timing_buckets, cadence_file)
-        output_files['cadence_report'] = str(cadence_file)
-        
-        self.logger.info(f"Generated {len(output_files)} enhanced output files")
-        return output_files
     
-    def _generate_enhanced_markdown(self,
-                                  timing_buckets: List[TimingBucket],
-                                  cadence_analysis: CadenceAnalysis,
-                                  uncertainty_result,
-                                  output_file: Path):
-        """Generate enhanced markdown report with detailed timing analysis."""
-        with open(output_file, 'w', encoding='utf-8') as f:
-            f.write("# TalkGPT Enhanced Transcription with Timing Analysis\n\n")
-            f.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}  \n")
-            f.write(f"**Timing Buckets:** {len(timing_buckets)}  \n")
-            f.write(f"**Total Words:** {cadence_analysis.total_words}  \n")
-            f.write(f"**Total Gaps:** {cadence_analysis.total_gaps}  \n")
-            f.write(f"**Cadence Summary:** {cadence_analysis.cadence_summary}  \n")
-            
-            if cadence_analysis.anomalous_buckets > 0:
-                f.write(f"**Anomalous Buckets:** {cadence_analysis.anomalous_buckets}/{len(timing_buckets)} "
-                       f"({cadence_analysis.anomalous_buckets/len(timing_buckets)*100:.1f}%)  \n")
-            
-            f.write("\n## Cadence Statistics\n\n")
-            f.write(f"- **Global Gap Mean:** {cadence_analysis.global_gap_mean:.3f}s  \n")
-            f.write(f"- **Global Gap Std:** {cadence_analysis.global_gap_std:.3f}s  \n")
-            f.write(f"- **Anomaly Threshold:** {cadence_analysis.anomaly_threshold}x standard deviation  \n")
-            
-            if cadence_analysis.gap_percentiles:
-                f.write("\n### Gap Distribution Percentiles\n\n")
-                for percentile, value in cadence_analysis.gap_percentiles.items():
-                    f.write(f"- **{percentile.upper()}:** {value:.3f}s  \n")
-            
-            f.write("\n## Detailed Transcript with Timing Analysis\n\n")
-            
-            for i, bucket in enumerate(timing_buckets, 1):
-                # Bucket header with timing
-                start_time = self._format_time(bucket.start_ts)
-                end_time = self._format_time(bucket.end_ts)
-                duration = bucket.end_ts - bucket.start_ts
-                
-                f.write(f"{i}. **[{start_time}–{end_time}]** {bucket.text}  \n")
-                
-                # Timing metrics
-                f.write(f"    <sub>confidence {bucket.confidence:.2f}</sub>  \n")
-                
-                # Speaker overlap status
-                if bucket.speaker_overlap is not None:
-                    overlap_status = "true" if bucket.speaker_overlap else "false"
-                else:
-                    overlap_status = "unknown"
-                f.write(f"    <sub>speaker_overlap {overlap_status}</sub>  \n")
-                
-                # Word gap statistics
-                f.write(f"    <sub>word_gap_count {bucket.word_gap_count}</sub>  \n")
-                
-                if bucket.word_gaps:
-                    gaps_str = ",".join(f"{gap:.4f}" for gap in bucket.word_gaps)
-                    f.write(f"    <sub>word_gaps {gaps_str}</sub>  \n")
-                
-                f.write(f"    <sub>word_gap_mean {bucket.word_gap_mean:.4f}</sub>  \n")
-                f.write(f"    <sub>word_gap_var {bucket.word_gap_var:.6f}</sub>  \n")
-                
-                # Additional metrics
-                f.write(f"    <sub>words_per_second {bucket.words_per_second:.2f}</sub>  \n")
-                f.write(f"    <sub>speech_time {bucket.total_speech_time:.2f}s</sub>  \n")
-                f.write(f"    <sub>silence_time {bucket.total_silence_time:.2f}s</sub>  \n")
-                
-                # Cadence anomaly indicators
-                if bucket.cadence_anomaly:
-                    severity_emoji = {
-                        'mild': '⚠️',
-                        'moderate': '🔶',
-                        'severe': '🔴'
-                    }.get(bucket.cadence_severity, '⚠️')
-                    
-                    f.write(f"    <sub>{severity_emoji} cadence_anomaly {bucket.cadence_severity}</sub>  \n")
-                
-                f.write("\n")
     
     def _generate_timing_json(self,
                             transcription_result,

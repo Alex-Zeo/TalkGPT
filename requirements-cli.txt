@@ -1,0 +1,17 @@
+# TalkGPT CLI Dependencies
+
+# ---- CLI Framework ----
+click==8.1.7
+typer==0.9.0
+
+# ---- Enhanced Console Output ----
+rich==13.7.0
+colorama==0.4.6
+
+# ---- Progress Bars & Status ----
+tqdm==4.66.4
+
+# ---- File System Operations ----
+watchdog==3.0.0
+
+

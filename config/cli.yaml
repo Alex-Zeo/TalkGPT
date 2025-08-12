@@ -1,0 +1,10 @@
+# TalkGPT CLI Configuration (overrides)
+
+output:
+  formats: ["srt", "json", "txt"]
+  word_timestamps: true
+
+logging:
+  level: "INFO"
+
+

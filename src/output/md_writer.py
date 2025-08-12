@@ -6,6 +6,9 @@ cadence classification, and speaker overlap detection.
 """
 
 from typing import List, Dict, Any, Optional, TextIO
+import json
+import csv
+import time
 import logging
 from pathlib import Path
 
@@ -237,6 +240,327 @@ def write_enhanced_markdown_report(records: List[TranscriptionRecord],
     """
     writer = MarkdownWriter(**writer_options)
     writer.write_enhanced_markdown(records, output_path, title, metadata)
+
+
+# --- Unified timing-analysis outputs (migrated from analytics.enhanced_output) ---
+
+def write_timing_analysis_outputs(
+    transcription_result: Any,
+    timing_buckets: List[Any],
+    cadence_analysis: Any,
+    speaker_result: Optional[Any],
+    uncertainty_result: Optional[Any],
+    output_dir: Path,
+    base_name: str,
+) -> Dict[str, str]:
+    """
+    Generate timing-analysis based outputs (markdown, json, srt, csv, cadence report)
+    using a unified interface colocated with markdown writers.
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_files: Dict[str, str] = {}
+
+    # 1) Enhanced Markdown with Timing Analysis
+    md_file = output_dir / f"{base_name}_enhanced.md"
+    _generate_enhanced_markdown_with_timing(timing_buckets, cadence_analysis, uncertainty_result, md_file)
+    output_files["enhanced_markdown"] = str(md_file)
+
+    # 2) Comprehensive JSON with Timing Data
+    json_file = output_dir / f"{base_name}_timing.json"
+    _generate_timing_json(transcription_result, timing_buckets, cadence_analysis, speaker_result, uncertainty_result, json_file)
+    output_files["timing_json"] = str(json_file)
+
+    # 3) SRT with timing indicators
+    srt_file = output_dir / f"{base_name}_timing.srt"
+    _generate_timing_srt(timing_buckets, srt_file)
+    output_files["timing_srt"] = str(srt_file)
+
+    # 4) Detailed CSV
+    csv_file = output_dir / f"{base_name}_timing_analysis.csv"
+    _generate_timing_csv(timing_buckets, cadence_analysis, csv_file)
+    output_files["timing_csv"] = str(csv_file)
+
+    # 5) Cadence Analysis Report
+    cadence_file = output_dir / f"{base_name}_cadence_report.md"
+    _generate_cadence_report(cadence_analysis, timing_buckets, cadence_file)
+    output_files["cadence_report"] = str(cadence_file)
+
+    return output_files
+
+
+def _generate_enhanced_markdown_with_timing(
+    timing_buckets: List[Any],
+    cadence_analysis: Any,
+    uncertainty_result: Optional[Any],
+    output_file: Path,
+) -> None:
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("# TalkGPT Enhanced Transcription with Timing Analysis\n\n")
+        f.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}  \n")
+        f.write(f"**Timing Buckets:** {len(timing_buckets)}  \n")
+        f.write(f"**Total Words:** {getattr(cadence_analysis, 'total_words', 0)}  \n")
+        f.write(f"**Total Gaps:** {getattr(cadence_analysis, 'total_gaps', 0)}  \n")
+        f.write(f"**Cadence Summary:** {getattr(cadence_analysis, 'cadence_summary', {})}  \n")
+
+        if getattr(cadence_analysis, 'anomalous_buckets', 0) > 0:
+            total = len(timing_buckets) or 1
+            ab = getattr(cadence_analysis, 'anomalous_buckets', 0)
+            f.write(f"**Anomalous Buckets:** {ab}/{total} ({ab/total*100:.1f}%)  \n")
+
+        f.write("\n## Cadence Statistics\n\n")
+        f.write(f"- **Global Gap Mean:** {getattr(cadence_analysis, 'global_gap_mean', 0.0):.3f}s  \n")
+        f.write(f"- **Global Gap Std:** {getattr(cadence_analysis, 'global_gap_std', 0.0):.3f}s  \n")
+        f.write(f"- **Anomaly Threshold:** {getattr(cadence_analysis, 'anomaly_threshold', 0)}x standard deviation  \n")
+
+        gp = getattr(cadence_analysis, 'gap_percentiles', None)
+        if gp:
+            f.write("\n### Gap Distribution Percentiles\n\n")
+            for percentile, value in gp.items():
+                f.write(f"- **{percentile.upper()}:** {value:.3f}s  \n")
+
+        f.write("\n## Detailed Transcript with Timing Analysis\n\n")
+        for i, bucket in enumerate(timing_buckets, 1):
+            start_time = _format_time_mmssms(getattr(bucket, 'start_ts', getattr(bucket, 'start_time', 0.0)))
+            end_time = _format_time_mmssms(getattr(bucket, 'end_ts', getattr(bucket, 'end_time', 0.0)))
+            text = getattr(bucket, 'text', '')
+            f.write(f"{i}. **[{start_time}–{end_time}]** {text}  \n")
+            f.write(f"    <sub>confidence {getattr(bucket, 'confidence', 0.0):.2f}</sub>  \n")
+            overlap_val = getattr(bucket, 'speaker_overlap', None)
+            if overlap_val is None:
+                overlap_status = "unknown"
+            else:
+                overlap_status = str(overlap_val).lower() if isinstance(overlap_val, bool) else str(overlap_val)
+            f.write(f"    <sub>speaker_overlap {overlap_status}</sub>  \n")
+            f.write(f"    <sub>word_gap_count {getattr(bucket, 'word_gap_count', 0)}</sub>  \n")
+            gaps = getattr(bucket, 'word_gaps', []) or []
+            if gaps:
+                gaps_str = ",".join(f"{gap:.4f}" for gap in gaps)
+                f.write(f"    <sub>word_gaps {gaps_str}</sub>  \n")
+            f.write(f"    <sub>word_gap_mean {getattr(bucket, 'word_gap_mean', 0.0):.4f}</sub>  \n")
+            f.write(f"    <sub>word_gap_var {getattr(bucket, 'word_gap_var', 0.0):.6f}</sub>  \n\n")
+
+
+def _generate_timing_json(
+    transcription_result: Any,
+    timing_buckets: List[Any],
+    cadence_analysis: Any,
+    speaker_result: Optional[Any],
+    uncertainty_result: Optional[Any],
+    output_file: Path,
+) -> None:
+    buckets_data = []
+    for bucket in timing_buckets:
+        start_ts = getattr(bucket, 'start_ts', getattr(bucket, 'start_time', 0.0))
+        end_ts = getattr(bucket, 'end_ts', getattr(bucket, 'end_time', 0.0))
+        words = getattr(bucket, 'words', []) or []
+        bucket_dict = {
+            'bucket_id': getattr(bucket, 'bucket_id', getattr(bucket, 'id', None)),
+            'start_ts': start_ts,
+            'end_ts': end_ts,
+            'duration': end_ts - start_ts,
+            'text': getattr(bucket, 'text', ''),
+            'word_count': len(words),
+            'words': [
+                {
+                    'word': getattr(w, 'word', ''),
+                    'start': getattr(w, 'start', 0.0),
+                    'end': getattr(w, 'end', 0.0),
+                    'probability': getattr(w, 'probability', 0.0),
+                } for w in words
+            ],
+            'timing_metrics': {
+                'word_gap_count': getattr(bucket, 'word_gap_count', 0),
+                'word_gaps': getattr(bucket, 'word_gaps', []) or [],
+                'word_gap_mean': getattr(bucket, 'word_gap_mean', 0.0),
+                'word_gap_var': getattr(bucket, 'word_gap_var', 0.0),
+                'words_per_second': getattr(bucket, 'words_per_second', 0.0),
+                'total_speech_time': getattr(bucket, 'total_speech_time', 0.0),
+                'total_silence_time': getattr(bucket, 'total_silence_time', 0.0),
+            },
+            'quality_metrics': {
+                'confidence': getattr(bucket, 'confidence', 0.0),
+                'speaker_overlap': getattr(bucket, 'speaker_overlap', None),
+                'cadence_anomaly': getattr(bucket, 'cadence_anomaly', False),
+                'cadence_severity': getattr(bucket, 'cadence_severity', None),
+            }
+        }
+        buckets_data.append(bucket_dict)
+
+    data: Dict[str, Any] = {
+        'metadata': {
+            'version': '0.2.0',
+            'format': 'TalkGPT Enhanced JSON with Timing Analysis v1.0',
+            'generated_at': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'features': ['word_timestamps', 'timing_analysis', 'cadence_analysis'],
+        },
+        'transcription': {
+            'language': getattr(transcription_result, 'language', 'unknown'),
+            'language_probability': getattr(transcription_result, 'language_probability', 0.0),
+            'total_duration': timing_buckets[-1].end_ts if timing_buckets else 0.0,
+        },
+        'timing_analysis': {
+            'bucket_count': len(timing_buckets),
+            'buckets': buckets_data,
+            'global_cadence': {
+                'gap_mean': getattr(cadence_analysis, 'global_gap_mean', 0.0),
+                'gap_std': getattr(cadence_analysis, 'global_gap_std', 0.0),
+                'total_words': getattr(cadence_analysis, 'total_words', 0),
+                'total_gaps': getattr(cadence_analysis, 'total_gaps', 0),
+                'anomaly_threshold': getattr(cadence_analysis, 'anomaly_threshold', 0),
+                'anomalous_buckets': getattr(cadence_analysis, 'anomalous_buckets', 0),
+                'gap_percentiles': getattr(cadence_analysis, 'gap_percentiles', {}),
+                'cadence_summary': getattr(cadence_analysis, 'cadence_summary', {}),
+            },
+        },
+    }
+
+    if speaker_result is not None:
+        data['speaker_analysis'] = {
+            'enabled': True,
+            'speaker_count': getattr(getattr(speaker_result, 'diarization_result', None), 'speaker_count', 0),
+            'overlaps_detected': len(getattr(getattr(speaker_result, 'diarization_result', None), 'overlap_segments', []) or []),
+        }
+
+    if uncertainty_result is not None:
+        data['uncertainty_analysis'] = {
+            'enabled': True,
+            'overall_score': getattr(getattr(uncertainty_result, 'quality_metrics', None), 'overall_quality_score', None),
+            'flagged_segments': getattr(uncertainty_result, 'flagged_segments', []),
+            'flagged_percentage': getattr(uncertainty_result, 'flagged_percentage', None),
+        }
+
+    with open(output_file, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+
+def _generate_timing_srt(timing_buckets: List[Any], output_file: Path) -> None:
+    with open(output_file, 'w', encoding='utf-8') as f:
+        for i, bucket in enumerate(timing_buckets, 1):
+            start_ts = getattr(bucket, 'start_ts', getattr(bucket, 'start_time', 0.0))
+            end_ts = getattr(bucket, 'end_ts', getattr(bucket, 'end_time', 0.0))
+            start_time = _format_srt_time(start_ts)
+            end_time = _format_srt_time(end_ts)
+            text = getattr(bucket, 'text', '')
+            indicators = []
+            if getattr(bucket, 'cadence_anomaly', False):
+                indicators.append(f"[{str(getattr(bucket, 'cadence_severity', 'CADENCE')).upper()}_CADENCE]")
+            if getattr(bucket, 'speaker_overlap', False):
+                indicators.append("[OVERLAP]")
+            if getattr(bucket, 'confidence', 1.0) < 0.5:
+                indicators.append("[LOW_CONF]")
+            if indicators:
+                text += " " + " ".join(indicators)
+            f.write(f"{i}\n")
+            f.write(f"{start_time} --> {end_time}\n")
+            f.write(f"{text}\n\n")
+
+
+def _generate_timing_csv(timing_buckets: List[Any], cadence_analysis: Any, output_file: Path) -> None:
+    with open(output_file, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        headers = [
+            'bucket_id', 'start_time', 'end_time', 'duration', 'text', 'word_count',
+            'confidence', 'speaker_overlap', 'word_gap_count', 'word_gap_mean',
+            'word_gap_var', 'words_per_second', 'speech_time', 'silence_time',
+            'cadence_anomaly', 'cadence_severity', 'gap_deviation_from_global',
+        ]
+        writer.writerow(headers)
+        for bucket in timing_buckets:
+            start_ts = getattr(bucket, 'start_ts', getattr(bucket, 'start_time', 0.0))
+            end_ts = getattr(bucket, 'end_ts', getattr(bucket, 'end_time', 0.0))
+            gap_mean = getattr(bucket, 'word_gap_mean', 0.0)
+            global_mean = getattr(cadence_analysis, 'global_gap_mean', 0.0)
+            row = [
+                getattr(bucket, 'bucket_id', getattr(bucket, 'id', None)),
+                start_ts,
+                end_ts,
+                end_ts - start_ts,
+                getattr(bucket, 'text', ''),
+                len(getattr(bucket, 'words', []) or []),
+                getattr(bucket, 'confidence', 0.0),
+                getattr(bucket, 'speaker_overlap', False),
+                getattr(bucket, 'word_gap_count', 0),
+                gap_mean,
+                getattr(bucket, 'word_gap_var', 0.0),
+                getattr(bucket, 'words_per_second', 0.0),
+                getattr(bucket, 'total_speech_time', 0.0),
+                getattr(bucket, 'total_silence_time', 0.0),
+                getattr(bucket, 'cadence_anomaly', False),
+                getattr(bucket, 'cadence_severity', None),
+                abs(gap_mean - global_mean),
+            ]
+            writer.writerow(row)
+
+
+def _generate_cadence_report(cadence_analysis: Any, timing_buckets: List[Any], output_file: Path) -> None:
+    with open(output_file, 'w', encoding='utf-8') as f:
+        f.write("# Cadence Analysis Report\n\n")
+        f.write(f"**Generated:** {time.strftime('%Y-%m-%d %H:%M:%S')}  \n")
+        f.write(f"**Analysis Summary:** {getattr(cadence_analysis, 'cadence_summary', {})}  \n\n")
+        f.write("## Global Statistics\n\n")
+        f.write(f"- **Total Words:** {getattr(cadence_analysis, 'total_words', 0):,}  \n")
+        f.write(f"- **Total Word Gaps:** {getattr(cadence_analysis, 'total_gaps', 0):,}  \n")
+        f.write(f"- **Global Gap Mean:** {getattr(cadence_analysis, 'global_gap_mean', 0.0):.4f}s  \n")
+        f.write(f"- **Global Gap Std:** {getattr(cadence_analysis, 'global_gap_std', 0.0):.4f}s  \n")
+        f.write(f"- **Anomaly Threshold:** {getattr(cadence_analysis, 'anomaly_threshold', 0)}x std deviation  \n")
+        ab = getattr(cadence_analysis, 'anomalous_buckets', 0)
+        total = len(timing_buckets) or 1
+        f.write(f"- **Anomalous Buckets:** {ab}/{total} ({ab/total*100:.1f}%)  \n\n")
+        gp = getattr(cadence_analysis, 'gap_percentiles', None)
+        if gp:
+            f.write("## Gap Distribution\n\n")
+            f.write("| Percentile | Gap Duration |\n")
+            f.write("|------------|-------------|\n")
+            for percentile, value in gp.items():
+                f.write(f"| {percentile.upper()} | {value:.4f}s |\n")
+            f.write("\n")
+        # Anomalous bucket details
+        anomalous = [b for b in timing_buckets if getattr(b, 'cadence_anomaly', False)]
+        if anomalous:
+            f.write("## Anomalous Cadence Segments\n\n")
+            f.write("| Time Range | Severity | Gap Mean | Gap Var | Deviation |\n")
+            f.write("|------------|----------|----------|---------|----------|\n")
+            gm = getattr(cadence_analysis, 'global_gap_mean', 0.0)
+            for bucket in anomalous:
+                start_ts = getattr(bucket, 'start_ts', getattr(bucket, 'start_time', 0.0))
+                end_ts = getattr(bucket, 'end_ts', getattr(bucket, 'end_time', 0.0))
+                tr = f"{_format_time_mmssms(start_ts)}–{_format_time_mmssms(end_ts)}"
+                dev = abs(getattr(bucket, 'word_gap_mean', 0.0) - gm)
+                f.write(f"| {tr} | {getattr(bucket, 'cadence_severity', '')} | {getattr(bucket, 'word_gap_mean', 0.0):.4f}s | {getattr(bucket, 'word_gap_var', 0.0):.6f} | {dev:.4f}s |\n")
+            f.write("\n")
+        # Recommendations
+        f.write("## Recommendations\n\n")
+        gmean = getattr(cadence_analysis, 'global_gap_mean', 0.0)
+        gstd = getattr(cadence_analysis, 'global_gap_std', 0.0)
+        ratio = gstd
+        if getattr(cadence_analysis, 'anomalous_buckets', 0) == 0:
+            f.write("✅ **Excellent cadence consistency** - No anomalous segments detected.  \n")
+        elif (getattr(cadence_analysis, 'anomalous_buckets', 0) / (len(timing_buckets) or 1)) < 0.1:
+            f.write("✅ **Good cadence consistency** - Only minor anomalies detected.  \n")
+        elif (getattr(cadence_analysis, 'anomalous_buckets', 0) / (len(timing_buckets) or 1)) < 0.3:
+            f.write("⚠️ **Moderate cadence variation** - Consider reviewing flagged segments.  \n")
+        else:
+            f.write("🔴 **High cadence variation** - Significant pacing inconsistencies detected.  \n")
+        if gmean > 0.3:
+            f.write("- Consider speech coaching for faster delivery  \n")
+        elif gmean < 0.05:
+            f.write("- Consider slowing down for better clarity  \n")
+        if ratio > 0.1:
+            f.write("- Work on consistent pacing throughout speech  \n")
+
+
+def _format_time_mmssms(seconds: float) -> str:
+    minutes = int(seconds // 60)
+    secs = seconds % 60
+    return f"{minutes:02d}:{secs:06.3f}"
+
+
+def _format_srt_time(seconds: float) -> str:
+    hours = int(seconds // 3600)
+    minutes = int((seconds % 3600) // 60)
+    secs = int(seconds % 60)
+    millisecs = int((seconds % 1) * 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{millisecs:03d}"
 
 def validate_markdown_output(output_path: Path) -> Dict[str, Any]:
     """

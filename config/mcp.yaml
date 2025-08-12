@@ -1,0 +1,15 @@
+# TalkGPT MCP Server Configuration (MVP)
+
+server:
+  host: "0.0.0.0"
+  port: 8000
+
+logging:
+  level: "INFO"
+
+tools:
+  transcribe_audio:
+    enabled: true
+    supported_formats: ["srt", "json", "txt", "csv"]
+
+

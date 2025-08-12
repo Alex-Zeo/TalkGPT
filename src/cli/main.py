@@ -207,10 +207,12 @@ def transcribe(ctx: CLIContext, input_path: str, output: Optional[str],
               help='Maximum number of files to process')
 @click.option('--continue-on-error/--stop-on-error', default=True,
               help='Continue processing if individual files fail')
+@click.option('--queue/--no-queue', default=False,
+              help='Enqueue jobs to Celery instead of inline processing')
 @pass_context
 def batch(ctx: CLIContext, input_dir: str, output: str, formats: List[str],
           pattern: str, recursive: bool, workers: Optional[int],
-          max_files: Optional[int], continue_on_error: bool):
+          max_files: Optional[int], continue_on_error: bool, queue: bool):
     """
     Process multiple audio/video files in batch.
     
@@ -225,7 +227,8 @@ def batch(ctx: CLIContext, input_dir: str, output: str, formats: List[str],
         'recursive': recursive,
         'workers': workers,
         'max_files': max_files,
-        'continue_on_error': continue_on_error
+        'continue_on_error': continue_on_error,
+        'queue': queue
     }
     
     # Remove None values
@@ -246,6 +249,8 @@ def batch(ctx: CLIContext, input_dir: str, output: str, formats: List[str],
             click.echo(f"   Total time: {result['total_time']:.2f}s")
             if result['failed'] > 0:
                 click.echo(f"   Failed: {result['failed']}")
+            if result.get('queued'):
+                click.echo(f"   Queued jobs: {len(result['queued'])}")
         
     except Exception as e:
         click.echo(f"Batch processing failed: {e}", err=True)
@@ -435,9 +440,13 @@ def analyze_quality(ctx: CLIContext, input_path: str, output: Optional[str], thr
         
         if not ctx.quiet:
             click.echo("Quality analysis completed:")
-            click.echo(f"   Quality score: {result['quality_score']:.2f}")
-            click.echo(f"   Flagged segments: {result['flagged_segments']}")
-            click.echo(f"   Recommendations: {len(result['recommendations'])}")
+            try:
+                click.echo(f"   Quality score: {result['quality_score']:.2f}")
+            except Exception:
+                click.echo(f"   Quality score: {result.get('quality_score','N/A')}")
+            click.echo(f"   Flagged segments: {result.get('flagged_segments','N/A')}")
+            if 'flagged_percentage' in result:
+                click.echo(f"   Flagged percentage: {result['flagged_percentage']:.1f}%")
         
     except Exception as e:
         click.echo(f"Quality analysis failed: {e}", err=True)
@@ -469,6 +478,34 @@ def benchmark(ctx: CLIContext, duration: int, sample_files: Optional[str]):
         
     except Exception as e:
         click.echo(f"Benchmark failed: {e}", err=True)
+        sys.exit(1)
+
+
+@cli.command()
+@click.option('--duration', type=int, default=60, help='Stream duration in seconds')
+@click.option('--device', type=int, default=None, help='Input device index (optional)')
+@click.option('--language', type=str, default=None, help='Language code (optional)')
+@click.option('--chunk-seconds', type=float, default=5.0, help='Chunk size in seconds')
+@click.option('--overlap-seconds', type=float, default=1.0, help='Overlap between chunks (context)')
+@pass_context
+def stream(ctx: CLIContext, duration: int, device: Optional[int], language: Optional[str], chunk_seconds: float, overlap_seconds: float):
+    """Real-time streaming transcription (microphone)."""
+    from .commands.stream import stream_transcription
+
+    try:
+        ok = stream_transcription(
+            duration=duration,
+            device=device,
+            language=language,
+            chunk_seconds=chunk_seconds,
+            overlap_seconds=overlap_seconds,
+            config=ctx.config,
+            logger=ctx.logger,
+        )
+        if not ok:
+            sys.exit(1)
+    except Exception as e:
+        click.echo(f"Streaming failed: {e}", err=True)
         sys.exit(1)
 
 

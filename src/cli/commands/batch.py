@@ -76,12 +76,35 @@ def process_batch(input_dir: Path,
     
     logger.get_logger("talkgpt.batch").info(f"Starting batch processing: {len(files)} files")
     
-    # Process files
+    # Queue mode via Celery if requested
+    use_queue = options.get('queue', False)
+    queued_jobs = []
+    if use_queue:
+        try:
+            from ...workers.task_manager import transcribe_file_task
+            for file_path in files:
+                file_output_dir = output_dir / file_path.stem
+                job = transcribe_file_task.delay(
+                    input_path=str(file_path),
+                    output_dir=str(file_output_dir),
+                    enhanced_analysis=bool(options.get('enhanced_analysis', False)),
+                    formats=list(options.get('formats', []) or []),
+                    language=options.get('language')
+                )
+                queued_jobs.append({'file': str(file_path), 'task_id': job.id})
+        except Exception as e:
+            logger.get_logger("talkgpt.batch").warning(f"Queue mode requested but unavailable: {e}. Falling back to inline processing.")
+            use_queue = False
+
+    # Process files inline if not queuing
     results = []
     successful = 0
     failed = 0
     
     for i, file_path in enumerate(files, 1):
+        if use_queue:
+            # Skip inline processing when queued
+            continue
         file_output_dir = output_dir / file_path.stem
         
         logger.get_logger("talkgpt.batch").info(f"Processing {i}/{len(files)}: {file_path.name}")
@@ -123,7 +146,8 @@ def process_batch(input_dir: Path,
         'successful': successful,
         'failed': failed,
         'total_time': total_time,
-        'files': results
+        'files': results,
+        'queued': queued_jobs if use_queue else None
     }
     
     logger.get_logger("talkgpt.batch").info(f"Batch processing completed: {successful}/{len(files)} successful")

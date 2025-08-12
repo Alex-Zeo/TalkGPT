@@ -167,22 +167,44 @@ def show_job_status(quiet: bool = False):
         click.echo("No active jobs")
         return
     
-    # This is a placeholder - in the future this would connect to Celery or worker system
+    # Try to query Celery/Redis for simple stats
     console.print("📋 [bold blue]Job Status[/bold blue]")
-    
-    job_table = Table(title="Active Transcription Jobs")
-    job_table.add_column("Job ID", style="cyan")
-    job_table.add_column("File", style="green")
-    job_table.add_column("Status", style="yellow")
-    job_table.add_column("Progress", style="blue")
-    job_table.add_column("Started", style="magenta")
-    
-    # Placeholder data
-    job_table.add_row("No active jobs", "-", "-", "-", "-")
-    
-    console.print(job_table)
-    
-    console.print("ℹ️  [dim]Job monitoring requires worker system to be running[/dim]")
+
+    try:
+        from ...workers.celery_app import celery_app
+        inspect = celery_app.control.inspect(timeout=0.5)
+        active = inspect.active() or {}
+        scheduled = inspect.scheduled() or {}
+        reserved = inspect.reserved() or {}
+
+        def count_tasks(mapping):
+            total = 0
+            for _, tasks in (mapping or {}).items():
+                total += len(tasks or [])
+            return total
+
+        job_table = Table(title="Transcription Queue Overview")
+        job_table.add_column("Metric", style="cyan")
+        job_table.add_column("Count", style="green")
+
+        job_table.add_row("Active", str(count_tasks(active)))
+        job_table.add_row("Scheduled", str(count_tasks(scheduled)))
+        job_table.add_row("Reserved", str(count_tasks(reserved)))
+
+        console.print(job_table)
+
+        if not (active or scheduled or reserved):
+            console.print("ℹ️  [dim]No active workers or no jobs currently in the queue[/dim]")
+    except Exception as e:
+        console.print(f"⚠️  [yellow]Could not query workers: {e}[/yellow]")
+        job_table = Table(title="Active Transcription Jobs")
+        job_table.add_column("Job ID", style="cyan")
+        job_table.add_column("File", style="green")
+        job_table.add_column("Status", style="yellow")
+        job_table.add_column("Progress", style="blue")
+        job_table.add_column("Started", style="magenta")
+        job_table.add_row("Unknown (workers unavailable)", "-", "-", "-", "-")
+        console.print(job_table)
 
 
 def show_worker_status(quiet: bool = False):

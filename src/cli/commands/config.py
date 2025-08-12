@@ -179,9 +179,16 @@ def set_config_value(config: TalkGPTConfig, key: str, value: str, save: bool, qu
             console.print(f"✅ [green]Set {key} = {converted_value}[/green]")
         
         if save:
-            # Save to config file (placeholder - would need to implement config saving)
-            if not quiet:
-                console.print("💾 [yellow]Config saving not yet implemented[/yellow]")
+            # Persist to config/local.yaml by default
+            try:
+                manager = ConfigManager()
+                manager.save_config(config, filename="local")
+                if not quiet:
+                    console.print("💾 [green]Saved to config/local.yaml[/green]")
+            except Exception as e:
+                if not quiet:
+                    console.print(f"❌ [red]Failed to save config: {e}[/red]")
+                raise
         else:
             if not quiet:
                 console.print("ℹ️  [dim]Changes are temporary. Use --save to persist.[/dim]")
